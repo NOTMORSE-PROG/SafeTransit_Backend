@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { email, password } = req.body;
 
     // Validate required fields
-    if (!email || password) {
+    if (!email || !password) {
       return res.status(400).json({ error: 'Missing email or password' });
     }
 

@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.5",
+    "@vercel/node": "^3.2.26",
     "bcrypt": "^5.1.1",
     "jsonwebtoken": "^9.0.2"
   },
