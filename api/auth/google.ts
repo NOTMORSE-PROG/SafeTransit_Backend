@@ -26,7 +26,12 @@ async function verifyGoogleToken(token: string): Promise<GoogleUserInfo | null> 
       return null;
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      sub: string;
+      email: string;
+      name: string;
+      picture?: string;
+    };
 
     return {
       id: data.sub,
