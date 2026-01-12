@@ -1,5 +1,6 @@
 // Input Validation for Authentication
-// Validates email format and password strength
+// Validates email format, password strength, and phone numbers
+import { parsePhoneNumber } from 'libphonenumber-js';
 
 /**
  * Validate email format
@@ -41,4 +42,22 @@ export const validatePassword = (password: string): {
   }
 
   return { valid: errors.length === 0, errors };
+};
+
+export const validatePhoneNumber = (
+  phoneNumber: string,
+  defaultCountry: string = 'ZA'
+): { valid: boolean; formatted?: string; error?: string } => {
+  try {
+    const phone = parsePhoneNumber(phoneNumber, defaultCountry as any);
+    if (phone.isValid()) {
+      return {
+        valid: true,
+        formatted: phone.format('E.164'),
+      };
+    }
+    return { valid: false, error: 'Invalid phone number format' };
+  } catch {
+    return { valid: false, error: 'Invalid phone number' };
+  }
 };
