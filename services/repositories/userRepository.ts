@@ -150,6 +150,18 @@ export const UserRepository = {
   },
 
   /**
+   * Mark onboarding as completed
+   */
+  async markOnboardingComplete(id: string): Promise<boolean> {
+    const result = await sql`
+      UPDATE users
+      SET onboarding_completed = TRUE
+      WHERE id = ${id}
+    `;
+    return (result as unknown as QueryResult).count > 0;
+  },
+
+  /**
    * Delete user (cascade deletes all related data)
    */
   async delete(id: string): Promise<boolean> {

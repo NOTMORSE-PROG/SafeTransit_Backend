@@ -64,6 +64,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         email: user.email,
         fullName: user.full_name,
         profileImageUrl: user.profile_image_url,
+        phoneNumber: user.phone_number,
+        onboardingCompleted: user.onboarding_completed,
         hasGoogleLinked: !!user.google_id,
         hasPasswordSet: true,
       },

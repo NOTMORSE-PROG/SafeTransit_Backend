@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyToken } from '../../services/auth/jwt';
 import { validatePhoneNumber } from '../../services/auth/validation';
 import { EmergencyContactRepository } from '../../services/repositories/emergencyContactRepository';
+import { UserRepository } from '../../services/repositories/userRepository';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -31,6 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (contacts.length === 0) {
         await EmergencyContactRepository.deleteByUserId(payload.userId);
+        await UserRepository.markOnboardingComplete(payload.userId);
         return res.status(200).json({ success: true, contacts: [] });
       }
 
@@ -63,6 +65,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         payload.userId,
         validatedContacts
       );
+
+      await UserRepository.markOnboardingComplete(payload.userId);
 
       return res.status(200).json({ success: true, contacts: createdContacts });
     }

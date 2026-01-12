@@ -35,6 +35,7 @@ export interface User {
   is_verified: boolean;
   verification_status: VerificationStatus;
   google_id: string | null;
+  onboarding_completed: boolean;
   created_at: string; // ISO timestamp
   updated_at: string; // ISO timestamp
 }
@@ -205,9 +206,10 @@ export interface FollowedLocation {
 // Helper Types for Inserts (Omit auto-generated fields)
 // ==============================================================================
 
-export type UserInsert = Omit<User, 'id' | 'created_at' | 'updated_at' | 'is_verified' | 'verification_status'> & {
+export type UserInsert = Omit<User, 'id' | 'created_at' | 'updated_at' | 'is_verified' | 'verification_status' | 'onboarding_completed'> & {
   is_verified?: boolean;
   verification_status?: VerificationStatus;
+  onboarding_completed?: boolean;
 };
 
 export type TipInsert = Omit<Tip, 'id' | 'created_at' | 'updated_at' | 'upvotes' | 'downvotes' | 'status'> & {
