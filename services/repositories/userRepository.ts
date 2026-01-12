@@ -87,31 +87,23 @@ export const UserRepository = {
     id: string,
     data: Partial<Pick<User, 'full_name' | 'phone_number' | 'profile_image_url'>>
   ): Promise<User | null> {
-    const updates: string[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const values: any[] = [];
-    let paramIndex = 1;
-
-    if (data.full_name !== undefined) {
-      updates.push(`full_name = $${paramIndex++}`);
-      values.push(data.full_name);
-    }
-    if (data.phone_number !== undefined) {
-      updates.push(`phone_number = $${paramIndex++}`);
-      values.push(data.phone_number);
-    }
-    if (data.profile_image_url !== undefined) {
-      updates.push(`profile_image_url = $${paramIndex++}`);
-      values.push(data.profile_image_url);
-    }
-
-    if (updates.length === 0) {
+    if (Object.keys(data).length === 0) {
       return this.findById(id);
     }
 
+    const user = await this.findById(id);
+    if (!user) return null;
+
+    const updatedFullName = data.full_name !== undefined ? data.full_name : user.full_name;
+    const updatedPhoneNumber = data.phone_number !== undefined ? data.phone_number : user.phone_number;
+    const updatedProfileImageUrl = data.profile_image_url !== undefined ? data.profile_image_url : user.profile_image_url;
+
     const result = await sql`
       UPDATE users
-      SET ${sql.unsafe(updates.join(', '))}
+      SET
+        full_name = ${updatedFullName},
+        phone_number = ${updatedPhoneNumber},
+        profile_image_url = ${updatedProfileImageUrl}
       WHERE id = ${id}
       RETURNING *
     `;
