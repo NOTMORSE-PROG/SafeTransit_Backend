@@ -90,6 +90,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     <div class="desc">Link Google to Account</div>
   </div>
 
+  <div class="endpoint">
+    <span class="method">POST</span>
+    <span class="path">/api/user/update-phone</span>
+    <div class="desc">Update User Phone Number</div>
+  </div>
+
+  <div class="endpoint">
+    <span class="method">GET</span>
+    <span class="path">/api/contacts/emergency</span>
+    <div class="desc">Get Emergency Contacts</div>
+  </div>
+
+  <div class="endpoint">
+    <span class="method">POST</span>
+    <span class="path">/api/contacts/emergency</span>
+    <div class="desc">Save Emergency Contacts</div>
+  </div>
+
   <p style="margin-top: 40px; color: #858585;">
     <a href="https://github.com/NOTMORSE-PROG/SafeTransit_Backend">GitHub</a>
   </p>
