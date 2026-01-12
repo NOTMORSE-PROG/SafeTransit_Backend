@@ -36,7 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ success: true, contacts: [] });
       }
 
-      const validatedContacts: Array<{ name: string; phone_number: string; order: number }> = [];
+      const validatedContacts: { name: string; phone_number: string; order: number }[] = [];
 
       for (let i = 0; i < contacts.length; i++) {
         const contact = contacts[i];

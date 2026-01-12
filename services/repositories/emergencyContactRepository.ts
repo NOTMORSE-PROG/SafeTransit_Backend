@@ -23,7 +23,7 @@ export const EmergencyContactRepository = {
 
   async createBatch(
     userId: string,
-    contacts: Array<{ name: string; phone_number: string; order: number }>
+    contacts: { name: string; phone_number: string; order: number }[]
   ): Promise<EmergencyContact[]> {
     await sql`
       DELETE FROM emergency_contacts WHERE user_id = ${userId}

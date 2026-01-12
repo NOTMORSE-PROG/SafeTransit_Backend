@@ -1,6 +1,6 @@
 // Input Validation for Authentication
 // Validates email format, password strength, and phone numbers
-import { parsePhoneNumber } from 'libphonenumber-js';
+import { parsePhoneNumber, type CountryCode } from 'libphonenumber-js';
 
 /**
  * Validate email format
@@ -49,7 +49,7 @@ export const validatePhoneNumber = (
   defaultCountry: string = 'ZA'
 ): { valid: boolean; formatted?: string; error?: string } => {
   try {
-    const phone = parsePhoneNumber(phoneNumber, defaultCountry as any);
+    const phone = parsePhoneNumber(phoneNumber, defaultCountry as CountryCode);
     if (phone.isValid()) {
       return {
         valid: true,
