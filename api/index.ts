@@ -108,6 +108,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     <div class="desc">Save Emergency Contacts</div>
   </div>
 
+  <div class="endpoint">
+    <span class="method">PUT</span>
+    <span class="path">/api/user/update-profile</span>
+    <div class="desc">Update User Profile (Name, Photo)</div>
+  </div>
+
+  <div class="endpoint">
+    <span class="method">POST</span>
+    <span class="path">/api/uploadthing/route</span>
+    <div class="desc">UploadThing File Upload Handler</div>
+  </div>
+
   <p style="margin-top: 40px; color: #858585;">
     <a href="https://github.com/NOTMORSE-PROG/SafeTransit_Backend">GitHub</a>
   </p>
