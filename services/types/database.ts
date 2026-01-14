@@ -203,6 +203,21 @@ export interface FollowedLocation {
 }
 
 // ==============================================================================
+// Locations (Search)
+// ==============================================================================
+
+export interface Location {
+  id: string; // UUID
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  type: string;
+  search_count: number;
+  created_at: string; // ISO timestamp
+}
+
+// ==============================================================================
 // Helper Types for Inserts (Omit auto-generated fields)
 // ==============================================================================
 
@@ -226,4 +241,8 @@ export type FamilyInsert = Omit<Family, 'id' | 'created_at' | 'updated_at'>;
 
 export type NotificationInsert = Omit<Notification, 'id' | 'created_at' | 'is_read'> & {
   is_read?: boolean;
+};
+
+export type LocationInsert = Omit<Location, 'id' | 'created_at' | 'search_count'> & {
+  search_count?: number;
 };
