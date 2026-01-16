@@ -22,7 +22,30 @@ interface NominatimPlace {
   };
 }
 
+// Photon API Types
+interface PhotonFeature {
+  properties: {
+    osm_id: number;
+    osm_type: string;
+    name: string;
+    street?: string;
+    city?: string;
+    district?: string;
+    locality?: string;
+    country?: string;
+    type?: string;
+  };
+  geometry: {
+    coordinates: [number, number]; // [lon, lat]
+  };
+}
+
+interface PhotonResponse {
+  features: PhotonFeature[];
+}
+
 const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
+const PHOTON_BASE_URL = 'https://photon.komoot.io';
 const USER_AGENT = 'SafeTransit/1.0';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -53,114 +76,143 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const limit = 8;
+    const limit = 10;
     const query = q.trim();
 
-    // 1. Search Local Database
+    // 1. Search Local Database (Highest Priority)
     const localResults = await LocationRepository.search(query, limit);
     
-    // If we have enough local results, return them
-    if (localResults.length >= limit) {
-      // Increment search count for the top result (assuming it's the most relevant)
-      if (localResults[0]) {
-        await LocationRepository.incrementSearchCount(localResults[0].id);
-      }
-      return res.status(200).json(localResults);
-    }
-
-    // 2. Fallback to Nominatim API
-    // Calculate how many more we need
-    const needed = limit - localResults.length;
+    // If we have a perfect match or enough local results, we could stop here, 
+    // but for "more locations" we should fetch from APIs too.
     
-    // Fetch from Nominatim
-    const params = new URLSearchParams({
-      q: query,
-      format: 'json',
-      addressdetails: '1',
-      limit: (needed * 2).toString(), // Fetch extra to filter
-      countrycodes: 'ph', // Limit to Philippines
-      viewbox: '120.8,14.8,121.2,14.4', // Manila area bounding box
-      bounded: '0',
-    });
+    // 2. Fetch from External APIs in Parallel
+    const [photonResults, nominatimResults] = await Promise.all([
+      searchPhoton(query),
+      searchNominatim(query)
+    ]);
 
-    const nominatimResponse = await fetch(
-      `${NOMINATIM_BASE_URL}/search?${params.toString()}`,
-      {
-        headers: {
-          'User-Agent': USER_AGENT,
-        },
-      }
-    );
-
-    if (!nominatimResponse.ok) {
-      console.error('Nominatim API error:', nominatimResponse.statusText);
-      // Return local results if API fails
-      return res.status(200).json(localResults);
-    }
-
-    const nominatimData = (await nominatimResponse.json()) as NominatimPlace[];
+    // 3. Merge and Deduplicate Results
+    const allResults = mergeResults(localResults, photonResults, nominatimResults);
     
-    // Process and cache new results
-    const newResults: Location[] = [];
-    
-    for (const place of nominatimData) {
-      const name = getShortName(place);
-      const address = place.display_name;
-      
-      // Check if already exists in local results
-      const existsLocally = localResults.some(
-        (l) => l.name === name || l.address === address
-      );
-      
-      if (!existsLocally) {
-        // Check if exists in DB but wasn't returned (to avoid duplicates)
-        const existingDb = await LocationRepository.findByDetails(name, address);
-        
-        if (existingDb) {
-          newResults.push(existingDb);
-        } else {
-          // Cache to DB
-          try {
-            const newLocation: LocationInsert = {
-              name,
-              address,
-              latitude: parseFloat(place.lat),
-              longitude: parseFloat(place.lon),
-              type: place.type || 'general',
-              search_count: 1, // Start with 1 search count
-            };
-            
-            const savedLocation = await LocationRepository.create(newLocation);
-            newResults.push(savedLocation);
-          } catch (err) {
-            console.error('Error caching location:', err);
-            // If caching fails, just return the object structure without ID
-            newResults.push({
-              id: `temp_${place.place_id}`,
-              ...place,
-              name,
-              address,
-              latitude: parseFloat(place.lat),
-              longitude: parseFloat(place.lon),
-              type: place.type || 'general',
-              search_count: 0,
-              created_at: new Date().toISOString(),
-            } as Location);
-          }
-        }
-      }
-      
-      if (localResults.length + newResults.length >= limit) break;
-    }
+    // Return top N results
+    res.status(200).json(allResults.slice(0, limit));
 
-    // Combine results
-    const combinedResults = [...localResults, ...newResults];
-    
-    res.status(200).json(combinedResults);
   } catch (error) {
     console.error('Search error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+}
+
+async function searchPhoton(query: string): Promise<Location[]> {
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      limit: '10',
+      lat: '14.5995', // Bias towards Manila
+      lon: '120.9842',
+      lang: 'en',
+    });
+
+    const response = await fetch(`${PHOTON_BASE_URL}/api/?${params.toString()}`);
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as PhotonResponse;
+    
+    return data.features.map((feature, index) => {
+      const { properties, geometry } = feature;
+      const name = properties.name || properties.street || properties.city || 'Unknown Location';
+      
+      // Construct address
+      const addressParts = [
+        properties.street,
+        properties.district || properties.locality,
+        properties.city,
+        properties.country
+      ].filter(Boolean);
+      
+      const address = addressParts.join(', ');
+
+      return {
+        id: `photon_${properties.osm_id}_${index}`,
+        name,
+        address: address || name,
+        latitude: geometry.coordinates[1],
+        longitude: geometry.coordinates[0],
+        type: properties.type || properties.osm_type || 'general',
+        search_count: 0,
+        created_at: new Date().toISOString(),
+      } as Location;
+    });
+  } catch (error) {
+    console.error('Photon API error:', error);
+    return [];
+  }
+}
+
+async function searchNominatim(query: string): Promise<Location[]> {
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      format: 'json',
+      addressdetails: '1',
+      limit: '5',
+      countrycodes: 'ph',
+      viewbox: '120.90,14.75,121.15,14.30',
+      bounded: '0',
+    });
+
+    const response = await fetch(`${NOMINATIM_BASE_URL}/search?${params.toString()}`, {
+      headers: { 'User-Agent': USER_AGENT },
+    });
+
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as NominatimPlace[];
+
+    return data.map((place) => ({
+      id: `nominatim_${place.place_id}`,
+      name: getShortName(place),
+      address: place.display_name,
+      latitude: parseFloat(place.lat),
+      longitude: parseFloat(place.lon),
+      type: place.type || 'general',
+      search_count: 0,
+      created_at: new Date().toISOString(),
+    } as Location));
+  } catch (error) {
+    console.error('Nominatim API error:', error);
+    return [];
+  }
+}
+
+function mergeResults(local: Location[], photon: Location[], nominatim: Location[]): Location[] {
+  const merged: Location[] = [...local];
+  const seen = new Set<string>();
+
+  // Add local IDs/Names to seen set
+  local.forEach(l => {
+    seen.add(l.name.toLowerCase());
+    seen.add(`${l.latitude.toFixed(4)},${l.longitude.toFixed(4)}`);
+  });
+
+  // Helper to add if unique
+  const addUnique = (results: Location[]) => {
+    results.forEach(item => {
+      const keyName = item.name.toLowerCase();
+      const keyCoord = `${item.latitude.toFixed(4)},${item.longitude.toFixed(4)}`;
+      
+      if (!seen.has(keyName) && !seen.has(keyCoord)) {
+        merged.push(item);
+        seen.add(keyName);
+        seen.add(keyCoord);
+      }
+    });
+  };
+
+  addUnique(photon);
+  addUnique(nominatim);
+
+  return merged;
 }
 
 /**
