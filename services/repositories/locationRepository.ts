@@ -101,5 +101,48 @@ export const LocationRepository = {
       LIMIT ${limit}
     `;
     return result as Location[];
+  },
+
+  /**
+   * Find cached location by coordinates
+   * Uses rounded coordinates for approximate matching (~11m precision at 4 decimals)
+   */
+  async findByCoordinates(
+    latitude: number,
+    longitude: number,
+    precision: number = 4
+  ): Promise<Location | null> {
+    const lat = parseFloat(latitude.toFixed(precision));
+    const lon = parseFloat(longitude.toFixed(precision));
+
+    const result = await sql`
+      SELECT * FROM locations
+      WHERE
+        ROUND(latitude::numeric, ${precision}) = ROUND(${lat}::numeric, ${precision}) AND
+        ROUND(longitude::numeric, ${precision}) = ROUND(${lon}::numeric, ${precision})
+      LIMIT 1
+    `;
+    return (result[0] as Location) || null;
+  },
+
+  /**
+   * Cache a reverse geocode result
+   * Checks for existing location by coordinates to avoid duplicates
+   */
+  async cacheReverseGeocode(data: LocationInsert): Promise<Location> {
+    // First check if we already have a location at these coordinates
+    const existing = await this.findByCoordinates(data.latitude, data.longitude);
+    if (existing) {
+      return existing;
+    }
+
+    // Also check by name to avoid duplicates
+    const existingByName = await this.findByDetails(data.name, data.address);
+    if (existingByName) {
+      return existingByName;
+    }
+
+    // Create new cached location
+    return this.create(data);
   }
 };
