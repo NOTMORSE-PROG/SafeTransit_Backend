@@ -197,14 +197,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const topResults = rankedResults.slice(0, limit);
     const enrichedResults = await Promise.all(
       topResults.map(async (location) => {
-        // Get pickup points for this location (if any)
-        const pickupPoints = await PickupPointRepository.getForLocationWithDistance(
-          location.id,
+        // Get pickup points near this location by coordinates (within 100m)
+        const pickupPoints = await PickupPointRepository.findNearby(
+          location.latitude,
+          location.longitude,
+          100,
           userLat ?? undefined,
           userLon ?? undefined
         );
 
-        // Return location with pickup points
         return {
           ...location,
           pickup_points: pickupPoints.length > 0 ? pickupPoints.slice(0, 5) : undefined,

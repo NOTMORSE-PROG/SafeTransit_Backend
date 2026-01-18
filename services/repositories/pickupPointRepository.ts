@@ -269,4 +269,50 @@ export const PickupPointRepository = {
       return [];
     }
   },
+
+  /**
+   * Find pickup points near coordinates (within radius)
+   * Used to match pickup points to locations from external APIs
+   */
+  async findNearby(
+    lat: number,
+    lon: number,
+    radiusMeters: number = 100,
+    userLat?: number,
+    userLon?: number
+  ): Promise<Array<PickupPoint & { distance_meters?: number }>> {
+    try {
+      const locationPoint = `POINT(${lon} ${lat})`;
+      const userPoint = userLat && userLon ? `POINT(${userLon} ${userLat})` : null;
+
+      const result = await sql`
+        SELECT
+          *,
+          ST_Distance(
+            geom::geography,
+            ST_SetSRID(ST_GeomFromText(${locationPoint}), 4326)::geography
+          ) AS location_distance_meters
+          ${userPoint ? sql`, ST_Distance(
+            geom::geography,
+            ST_SetSRID(ST_GeomFromText(${userPoint}), 4326)::geography
+          ) AS distance_meters` : sql``}
+        FROM pickup_points
+        WHERE verified = TRUE
+          AND ST_DWithin(
+            geom::geography,
+            ST_SetSRID(ST_GeomFromText(${locationPoint}), 4326)::geography,
+            ${radiusMeters}
+          )
+        ORDER BY
+          verified DESC,
+          ${userPoint ? sql`distance_meters ASC` : sql`location_distance_meters ASC`}
+        LIMIT 10
+      `;
+
+      return result as Array<PickupPoint & { distance_meters?: number }>;
+    } catch (error) {
+      console.error('[PickupPointRepository] Error finding nearby:', error);
+      return [];
+    }
+  },
 };
