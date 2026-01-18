@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { LocationRepository } from '../../services/repositories/locationRepository';
 import type { LocationInsert, Location } from '../../services/types/database';
+import { rankSearchResults } from '../../services/searchRanking';
+import { verifyToken } from '../../services/auth/jwt';
 
 // Nominatim API Types
 interface NominatimPlace {
@@ -68,39 +70,130 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { q } = req.query;
+  const { q, lat, lon } = req.query;
 
   if (!q || typeof q !== 'string' || q.trim().length < 2) {
     res.status(400).json({ error: 'Query parameter "q" is required and must be at least 2 characters' });
     return;
   }
 
+  // Parse user location for proximity-based search
+  const userLat = lat ? parseFloat(lat as string) : null;
+  const userLon = lon ? parseFloat(lon as string) : null;
+  const hasUserLocation = userLat !== null && userLon !== null &&
+    !isNaN(userLat) && !isNaN(userLon);
+
+  // Extract user ID from Authorization header (optional)
+  let userId: string | undefined;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.substring(7);
+      const payload = verifyToken(token);
+      if (payload) {
+        userId = payload.userId;
+      }
+    } catch (error) {
+      // Non-critical: search works without auth, just no personalization
+      console.log('Token verification failed, proceeding without personalization');
+    }
+  }
+
   try {
     const limit = 10;
     const query = q.trim();
 
-    // 1. Search Local Database (Highest Priority)
-    const localResults = await LocationRepository.search(query, limit);
-    
-    // If we have a perfect match or enough local results, we could stop here, 
-    // but for "more locations" we should fetch from APIs too.
-    
-    // 2. Fetch from External APIs in Parallel
-    const [photonResults, nominatimResults] = await Promise.all([
-      searchPhoton(query),
-      searchNominatim(query)
-    ]);
+    // 1. Search Local Database
+    // Use proximity-based search if user location is available (Grab-like)
+    let localResults: Location[];
+    if (hasUserLocation) {
+      // Proximity search with distance-based ranking
+      localResults = await LocationRepository.searchWithProximity(
+        query,
+        userLat!,
+        userLon!,
+        50, // 50km radius for search
+        limit
+      );
+    } else {
+      // Fallback to simple search
+      localResults = await LocationRepository.search(query, limit);
+    }
+
+    // 2. Fetch from External APIs in Parallel (only if local results are insufficient)
+    let photonResults: Location[] = [];
+    let nominatimResults: Location[] = [];
+
+    if (localResults.length < 5) {
+      [photonResults, nominatimResults] = await Promise.all([
+        searchPhoton(query),
+        searchNominatim(query)
+      ]);
+    }
 
     // 3. Merge and Deduplicate Results
-    const allResults = mergeResults(localResults, photonResults, nominatimResults);
-    
-    // Return top N results
-    res.status(200).json(allResults.slice(0, limit));
+    let allResults = mergeResults(localResults, photonResults, nominatimResults);
+
+    // 4. Add distance to external results if user location is available
+    if (hasUserLocation) {
+      allResults = allResults.map(result => {
+        // Only calculate distance for results that don't have it
+        if (!(result as any).distance_km) {
+          const distance = haversineDistance(
+            userLat!,
+            userLon!,
+            result.latitude,
+            result.longitude
+          );
+          return { ...result, distance_km: distance };
+        }
+        return result;
+      });
+    }
+
+    // 5. Apply Grab-like personalized ranking (text + proximity + popularity + user history)
+    const rankedResults = await rankSearchResults(allResults, {
+      query,
+      userLat: userLat ?? undefined,
+      userLon: userLon ?? undefined,
+      userId,
+      timeOfDay: new Date().getHours(),
+      dayOfWeek: new Date().getDay(),
+    });
+
+    // Return top N results with ranking scores (for transparency/debugging)
+    res.status(200).json(rankedResults.slice(0, limit));
 
   } catch (error) {
     console.error('Search error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+}
+
+/**
+ * Haversine distance calculation (km)
+ */
+function haversineDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function toRad(deg: number): number {
+  return deg * (Math.PI / 180);
 }
 
 async function searchPhoton(query: string): Promise<Location[]> {
