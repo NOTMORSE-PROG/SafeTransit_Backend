@@ -71,7 +71,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { q, lat, lon } = req.query;
+  const { q, lat, lon, location_id, mode } = req.query;
+
+  // Mode 1: Get pickup points for a specific location
+  if (mode === 'pickup_points' && location_id && typeof location_id === 'string') {
+    try {
+      const userLat = lat ? parseFloat(lat as string) : undefined;
+      const userLon = lon ? parseFloat(lon as string) : undefined;
+
+      const pickupPoints = await PickupPointRepository.getForLocationWithDistance(
+        location_id,
+        userLat,
+        userLon
+      );
+
+      return res.status(200).json({
+        success: true,
+        location_id,
+        count: pickupPoints.length,
+        pickup_points: pickupPoints.map(p => ({
+          ...p,
+          distance_km: p.distance_meters ? (p.distance_meters / 1000).toFixed(2) : undefined,
+        })),
+      });
+    } catch (error) {
+      return res.status(500).json({
+        error: 'Failed to fetch pickup points',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  // Mode 2: Regular location search (default)
 
   if (!q || typeof q !== 'string' || q.trim().length < 2) {
     res.status(400).json({ error: 'Query parameter "q" is required and must be at least 2 characters' });

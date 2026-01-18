@@ -111,19 +111,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   <div class="endpoint">
     <span class="method">GET</span>
     <span class="path">/api/locations/search</span>
-    <div class="desc">Search Locations (Proximity + Ranking)</div>
+    <div class="desc">Search Locations (Proximity + Ranking + Pickup Points)</div>
+  </div>
+
+  <div class="endpoint">
+    <span class="method">GET</span>
+    <span class="path">/api/locations/search?mode=pickup_points&location_id=...</span>
+    <div class="desc">Get Pickup Points for Location (Grab-style Multi-Entrance)</div>
   </div>
 
   <div class="endpoint">
     <span class="method">GET</span>
     <span class="path">/api/locations/reverse</span>
     <div class="desc">Reverse Geocoding</div>
-  </div>
-
-  <div class="endpoint">
-    <span class="method">GET</span>
-    <span class="path">/api/locations/pickup-points</span>
-    <div class="desc">Get Pickup Points for Location (Grab-style Multi-Entrance)</div>
   </div>
 
   <div class="endpoint">
