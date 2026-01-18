@@ -91,9 +91,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   </div>
 
   <div class="endpoint">
-    <span class="method">POST</span>
-    <span class="path">/api/user/update-phone</span>
-    <div class="desc">Update User Phone Number</div>
+    <span class="method">POST/PUT</span>
+    <span class="path">/api/user/profile</span>
+    <div class="desc">Update Profile (Name, Photo, Phone, Image Upload)</div>
   </div>
 
   <div class="endpoint">
@@ -109,14 +109,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   </div>
 
   <div class="endpoint">
-    <span class="method">PUT</span>
-    <span class="path">/api/user/update-profile</span>
-    <div class="desc">Update User Profile (Name, Photo)</div>
+    <span class="method">GET</span>
+    <span class="path">/api/locations/search</span>
+    <div class="desc">Search Locations (Proximity + Ranking)</div>
+  </div>
+
+  <div class="endpoint">
+    <span class="method">GET</span>
+    <span class="path">/api/locations/reverse</span>
+    <div class="desc">Reverse Geocoding</div>
+  </div>
+
+  <div class="endpoint">
+    <span class="method">GET/POST/PUT/DELETE</span>
+    <span class="path">/api/user/saved-places</span>
+    <div class="desc">User Saved Places (Home, Work, Favorites)</div>
+  </div>
+
+  <div class="endpoint">
+    <span class="method">GET</span>
+    <span class="path">/api/user/suggestions</span>
+    <div class="desc">Personalized Location Suggestions</div>
   </div>
 
   <div class="endpoint">
     <span class="method">POST</span>
-    <span class="path">/api/uploadthing/route</span>
+    <span class="path">/api/user/track-location</span>
+    <div class="desc">Track User Location Actions</div>
+  </div>
+
+  <div class="endpoint">
+    <span class="method">POST</span>
+    <span class="path">/api/uploadthing</span>
     <div class="desc">UploadThing File Upload Handler</div>
   </div>
 
