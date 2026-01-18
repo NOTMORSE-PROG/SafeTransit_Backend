@@ -1,27 +1,25 @@
-// Update User Profile API Endpoint
-// Handles profile updates including name and profile image URL
-// Auto-deletes old profile images from UploadThing when replaced
-
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyToken } from '../../services/auth/jwt';
+import { validatePhoneNumber } from '../../services/auth/validation';
 import { UserRepository } from '../../services/repositories/userRepository';
 import { UTApi } from 'uploadthing/server';
 
-// Initialize UploadThing API for file deletion
 const utapi = new UTApi({
   token: process.env.UPLOADTHING_TOKEN,
 });
 
-/**
- * Extract UploadThing file key from URL
- * UploadThing URLs look like: https://utfs.io/f/{fileKey}
- */
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '5mb',
+    },
+  },
+};
+
 function extractFileKey(url: string): string | null {
   try {
     const urlObj = new URL(url);
-    // Handle both utfs.io and uploadthing.com URLs
     const pathname = urlObj.pathname;
-    // The file key is typically after /f/
     const match = pathname.match(/\/f\/([^/]+)/);
     return match ? match[1] : null;
   } catch {
@@ -30,13 +28,11 @@ function extractFileKey(url: string): string | null {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Allow both PUT and POST for flexibility
   if (req.method !== 'PUT' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // Verify authorization
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -49,26 +45,88 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    const { fullName, profileImageUrl, removePhoto } = req.body;
+    const { base64, fileName, mimeType, phoneNumber, fullName, profileImageUrl, removePhoto } = req.body;
 
-    // At least one field must be provided
-    if (fullName === undefined && profileImageUrl === undefined && !removePhoto) {
-      return res.status(400).json({ 
-        error: 'At least one of fullName, profileImageUrl, or removePhoto is required' 
+    if (base64 && fileName) {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+      const fileType = mimeType || 'image/jpeg';
+      if (!allowedTypes.includes(fileType)) {
+        return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, and WEBP are allowed.' });
+      }
+
+      const base64Data = base64.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      if (buffer.length > 4 * 1024 * 1024) {
+        return res.status(400).json({ error: 'File size exceeds 4MB limit' });
+      }
+
+      const file = new File([buffer], fileName, { type: fileType });
+      console.log('Uploading file to UploadThing:', fileName, 'size:', buffer.length);
+      const uploadResult = await utapi.uploadFiles([file]);
+
+      if (!uploadResult[0] || uploadResult[0].error) {
+        console.error('UploadThing error:', uploadResult[0]?.error);
+        return res.status(500).json({
+          error: 'Failed to upload file',
+          details: uploadResult[0]?.error?.message
+        });
+      }
+
+      const uploadedFile = uploadResult[0].data;
+      console.log('Upload successful:', uploadedFile.url);
+
+      return res.status(200).json({
+        success: true,
+        url: uploadedFile.url,
+        key: uploadedFile.key,
       });
     }
 
-    // Get current user to check for existing profile image
+    if (phoneNumber) {
+      const validation = validatePhoneNumber(phoneNumber);
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error || 'Invalid phone number' });
+      }
+
+      const updatedUser = await UserRepository.updateProfile(payload.userId, {
+        phone_number: validation.formatted,
+      });
+
+      if (!updatedUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      return res.status(200).json({
+        success: true,
+        user: {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          fullName: updatedUser.full_name,
+          profileImageUrl: updatedUser.profile_image_url,
+          phoneNumber: updatedUser.phone_number,
+          onboardingCompleted: updatedUser.onboarding_completed,
+          hasGoogleLinked: !!updatedUser.google_id,
+          hasPasswordSet: !!updatedUser.password_hash,
+        },
+      });
+    }
+
+    if (fullName === undefined && profileImageUrl === undefined && !removePhoto) {
+      return res.status(400).json({
+        error: 'At least one of fullName, profileImageUrl, phoneNumber, or removePhoto is required'
+      });
+    }
+
     const currentUser = await UserRepository.findById(payload.userId);
     if (!currentUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Handle photo removal or replacement - delete old image from UploadThing
     const oldImageUrl = currentUser.profile_image_url;
     const shouldDeleteOldImage = oldImageUrl && (
-      removePhoto || // User explicitly wants to remove photo
-      (profileImageUrl && profileImageUrl !== oldImageUrl) // User is uploading a new photo
+      removePhoto ||
+      (profileImageUrl && profileImageUrl !== oldImageUrl)
     );
 
     if (shouldDeleteOldImage && oldImageUrl) {
@@ -79,20 +137,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await utapi.deleteFiles([fileKey]);
           console.log('Successfully deleted old profile image');
         } catch (deleteError) {
-          // Log but don't fail the request if deletion fails
           console.error('Failed to delete old profile image:', deleteError);
         }
       }
     }
 
-    // Prepare update data
     const updateData: {
       full_name?: string;
       profile_image_url?: string | null;
     } = {};
 
     if (fullName !== undefined) {
-      // Validate name
       if (typeof fullName !== 'string' || fullName.trim().length < 2) {
         return res.status(400).json({ error: 'Name must be at least 2 characters' });
       }
@@ -100,20 +155,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (removePhoto) {
-      // Clear the profile image URL
       updateData.profile_image_url = null;
     } else if (profileImageUrl !== undefined) {
       updateData.profile_image_url = profileImageUrl;
     }
 
-    // Update user profile
     const updatedUser = await UserRepository.updateProfile(payload.userId, updateData);
 
     if (!updatedUser) {
       return res.status(404).json({ error: 'Failed to update user' });
     }
 
-    // Return formatted user data
     return res.status(200).json({
       success: true,
       user: {
@@ -128,7 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
   } catch (error) {
-    console.error('Update profile error:', error);
+    console.error('Profile API error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
