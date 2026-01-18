@@ -121,6 +121,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   </div>
 
   <div class="endpoint">
+    <span class="method">GET</span>
+    <span class="path">/api/locations/pickup-points</span>
+    <div class="desc">Get Pickup Points for Location (Grab-style Multi-Entrance)</div>
+  </div>
+
+  <div class="endpoint">
     <span class="method">GET/POST/PUT/DELETE</span>
     <span class="path">/api/user/saved-places</span>
     <div class="desc">User Saved Places (Home, Work, Favorites)</div>

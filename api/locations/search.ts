@@ -3,6 +3,7 @@ import { LocationRepository } from '../../services/repositories/locationReposito
 import type { LocationInsert, Location } from '../../services/types/database';
 import { rankSearchResults } from '../../services/searchRanking';
 import { verifyToken } from '../../services/auth/jwt';
+import { PickupPointRepository } from '../../services/repositories/pickupPointRepository';
 
 // Nominatim API Types
 interface NominatimPlace {
@@ -161,8 +162,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       dayOfWeek: new Date().getDay(),
     });
 
-    // Return top N results with ranking scores (for transparency/debugging)
-    res.status(200).json(rankedResults.slice(0, limit));
+    // 6. Enrich results with pickup points (Grab-style multi-entrance support)
+    const topResults = rankedResults.slice(0, limit);
+    const enrichedResults = await Promise.all(
+      topResults.map(async (location) => {
+        // Get pickup points for this location (if any)
+        const pickupPoints = await PickupPointRepository.getForLocationWithDistance(
+          location.id,
+          userLat ?? undefined,
+          userLon ?? undefined
+        );
+
+        // Return location with pickup points
+        return {
+          ...location,
+          pickup_points: pickupPoints.length > 0 ? pickupPoints.slice(0, 5) : undefined,
+          has_pickup_points: pickupPoints.length > 0,
+        };
+      })
+    );
+
+    // Return enriched results with pickup points
+    res.status(200).json(enrichedResults);
 
   } catch (error) {
     console.error('Search error:', error);
